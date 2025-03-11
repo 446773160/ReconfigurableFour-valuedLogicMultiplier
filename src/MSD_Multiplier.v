@@ -1,72 +1,73 @@
-module MSD_Multiplier #(
-        parameter p = 33,
-        parameter q = 33
+module MSD_Mult #(
+        parameter X = 33,
+        parameter Y = 33
     )(
         input clk,
         input rst_n,
-        input [2*p-1:0] a,
-        input [2*q-1:0] b,
-        output [2*p+2*q+21:0] o
+        input [2*X-1:0] in1,
+        input [2*Y-1:0] in2,
+        output [2*X+2*Y+21:0] result
     );
 
-    wire [2*p+2*q-3:0] partial_sum[q-1:0];
-    wire [    2*p-1:0]           m[q-1:0];
-    genvar i;
+    wire [2*X+2*Y-3:0] partial_sums[Y-1:0];
+    wire [2*X-1:0]      temp[Y-1:0];
+    genvar idx;
     generate
-        for (i = 0; i < q; i = i + 1) begin : M_trans
-            M_trans #(p) u_M_trans (clk, rst_n, a, b[2*i+1:2*i], m[i]);
+        for (idx = 0; idx < Y; idx = idx + 1) begin : PART_GEN
+            Transform #(X) u_transform (clk, rst_n, in1, in2[2*idx+1:2*idx], temp[idx]);
         end
     endgenerate
 
-    genvar j;
+    genvar jdx;
     generate
-        for (j = 1; j < q; j = j + 1) begin : S2P
-            assign partial_sum[j] = {{(q-j-1){2'b01}}, m[j], {j{2'b01}}};//(0 + m[j]) << (2*j);
+        for (jdx = 1; jdx < Y; jdx = jdx + 1) begin : SUM_GEN
+            assign partial_sums[jdx] = {{(Y-jdx-1){2'b10}}, temp[jdx], {jdx{2'b10}}};
         end
-        assign partial_sum[0] = {{32{2'b01}},  m[0]};
+        assign partial_sums[0] = {{32{2'b10}}, temp[0]};
     endgenerate
 
-    wire [2*p+2*q+1:0] sum1[16:0];
-    wire [2*p+2*q+5:0] sum2[8:0];
-    wire [2*p+2*q+9:0] sum3[4:0];
-    wire [2*p+2*q+13:0] sum4[2:0];
-    wire [2*p+2*q+17:0] sum5;
-    wire [2*p+2*q+21:0] sum_out;
-    genvar i1;
+    wire [2*X+2*Y+1:0] sum_lvl1[16:0];
+    wire [2*X+2*Y+5:0] sum_lvl2[8:0];
+    wire [2*X+2*Y+9:0] sum_lvl3[4:0];
+    wire [2*X+2*Y+13:0] sum_lvl4[2:0];
+    wire [2*X+2*Y+17:0] sum_lvl5;
+    wire [2*X+2*Y+21:0] final_sum;
+    
+    genvar lvl1;
     generate
-        for (i1 = 0; i1 < 16; i1 = i1 + 1) begin : ADD1
-            MSD_Adder #(p+q-1) u1_adder (clk, rst_n, partial_sum[i1], partial_sum[16 + i1], sum1[i1]);
+        for (lvl1 = 0; lvl1 < 16; lvl1 = lvl1 + 1) begin : ADD_LVL1
+            MSD_Adder #(X+Y-1) add1 (clk, rst_n, partial_sums[lvl1], partial_sums[16 + lvl1], sum_lvl1[lvl1]);
         end
-        MSD_Adder #(p+q-1) u1_adder (clk, rst_n, partial_sum[32], {65{2'b01}}, sum1[16]);
+        MSD_Adder #(X+Y-1) add1_extra (clk, rst_n, partial_sums[32], {65{2'b10}}, sum_lvl1[16]);
     endgenerate
 
-    genvar i2;
+    genvar lvl2;
     generate
-        for (i2 = 0; i2 < 8; i2 = i2 + 1) begin : ADD2
-            MSD_Adder #(p+q+1) u2_adder (clk, rst_n, sum1[i2], sum1[8 + i2], sum2[i2]);
+        for (lvl2 = 0; lvl2 < 8; lvl2 = lvl2 + 1) begin : ADD_LVL2
+            MSD_Adder #(X+Y+1) add2 (clk, rst_n, sum_lvl1[lvl2], sum_lvl1[8 + lvl2], sum_lvl2[lvl2]);
         end
-        MSD_Adder #(p+q+1) u2_adder (clk, rst_n, sum1[16], {67{2'b01}}, sum2[8]);
+        MSD_Adder #(X+Y+1) add2_extra (clk, rst_n, sum_lvl1[16], {67{2'b10}}, sum_lvl2[8]);
     endgenerate
 
-    genvar i3;
+    genvar lvl3;
     generate
-        for (i3 = 0; i3 < 4; i3 = i3 + 1) begin : ADD3
-            MSD_Adder #(p+q+3) u3_adder (clk, rst_n, sum2[i3], sum2[4 + i3], sum3[i3]);
+        for (lvl3 = 0; lvl3 < 4; lvl3 = lvl3 + 1) begin : ADD_LVL3
+            MSD_Adder #(X+Y+3) add3 (clk, rst_n, sum_lvl2[lvl3], sum_lvl2[4 + lvl3], sum_lvl3[lvl3]);
         end
-        MSD_Adder #(p+q+3) u3_adder (clk, rst_n, sum2[8], {69{2'b01}}, sum3[4]);
+        MSD_Adder #(X+Y+3) add3_extra (clk, rst_n, sum_lvl2[8], {69{2'b10}}, sum_lvl3[4]);
     endgenerate
 
-    genvar i4;
+    genvar lvl4;
     generate
-        for (i4 = 0; i4 < 2; i4 = i4 + 1) begin : ADD4
-            MSD_Adder #(p+q+5) u4_adder (clk, rst_n, sum3[i4], sum3[2 + i4], sum4[i4]);
+        for (lvl4 = 0; lvl4 < 2; lvl4 = lvl4 + 1) begin : ADD_LVL4
+            MSD_Adder #(X+Y+5) add4 (clk, rst_n, sum_lvl3[lvl4], sum_lvl3[2 + lvl4], sum_lvl4[lvl4]);
         end
-        MSD_Adder #(p+q+5) u4_adder (clk, rst_n, sum3[4], {71{2'b01}}, sum4[2]);
+        MSD_Adder #(X+Y+5) add4_extra (clk, rst_n, sum_lvl3[4], {71{2'b10}}, sum_lvl4[2]);
     endgenerate
 
-    MSD_Adder #(p+q+7) u5_adder (clk, rst_n, sum4[0], sum4[1], sum5);
-    MSD_Adder #(p+q+9) u6_adder (clk, rst_n, {4'b0101, sum4[2]}, sum5, sum_out);
+    MSD_Adder #(X+Y+7) add5 (clk, rst_n, sum_lvl4[0], sum_lvl4[1], sum_lvl5);
+    MSD_Adder #(X+Y+9) add6 (clk, rst_n, {4'b1010, sum_lvl4[2]}, sum_lvl5, final_sum);
 
-    assign o = sum_out;
+    assign result = final_sum;
 
 endmodule
