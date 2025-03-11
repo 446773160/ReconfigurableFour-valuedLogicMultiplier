@@ -1,0 +1,20 @@
+module T1_trans #(
+        parameter p = 33
+    ) (
+        input            clk,
+        input            rst_n,
+        input  [2*p-1:0] a,
+        input  [2*p-1:0] b,
+        output [2*p+1:0] t1
+    );
+
+    genvar i;
+    generate
+        for (i = 0; i < p; i = i + 1) begin
+            T1_trans_module u_T1_trans_module (clk, rst_n, a[2*i+1:2*i], b[2*i+1:2*i], t1[2*i+3:2*i+2]);
+        end
+    endgenerate
+
+    assign t1[1:0] = 2'b01;
+
+endmodule
